@@ -80,6 +80,10 @@ export async function deleteOrder(orderId: string): Promise<void> {
   await deleteDoc(doc(db, "orders", orderId));
 }
 
+export async function bulkUpdateOrders(orderIds: string[], changes: Partial<Order>): Promise<void> {
+  await Promise.all(orderIds.map((id) => updateOrder(id, changes)));
+}
+
 function rangeForQueryType(queryType: QueryType, today = new Date()) {
   switch (queryType) {
     case "pending_today":

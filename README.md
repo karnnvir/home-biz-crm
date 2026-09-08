@@ -74,7 +74,9 @@ This runs the frontend against your **live** Firebase project (Firestore + the d
 - Later, add the price the same way: *"Priya's cake is 1200 rupees"* — it updates the existing order instead of creating a new one.
 - Update status the same way: *"Priya's order is delivered"*.
 - Ask questions: *"What's pending this week?"*, *"How much did I make this month?"*
+- The Home screen always shows a "This month" summary (total / received / pending / order count) — no need to ask.
 - The **Orders** and **Customers** tabs are always there as a manual fallback if voice gets something wrong — everything can be hand-edited or deleted there.
+- **Bulk updates**: in Orders, tap **Select** to check off several orders at once (or "Select all" for everything in the current tab), then **Mark delivered** or **Mark paid** to update them all together — handy at the end of the day.
 
 ## Project structure
 

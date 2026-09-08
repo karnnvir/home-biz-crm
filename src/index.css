@@ -347,6 +347,18 @@ a {
   white-space: nowrap;
 }
 
+.order-row-select {
+  justify-content: flex-start;
+  gap: 12px;
+}
+
+.order-row-select input[type="checkbox"] {
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  margin: 2px 0 0;
+}
+
 .tabs {
   display: flex;
   gap: 8px;
