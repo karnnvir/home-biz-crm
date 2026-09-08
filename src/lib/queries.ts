@@ -126,6 +126,32 @@ function rangeForQueryType(queryType: QueryType, today = new Date()) {
   }
 }
 
+export interface MonthlyPaymentSummary {
+  total: number;
+  received: number;
+  pending: number;
+  orderCount: number;
+}
+
+// Computed client-side from the already-subscribed orders list — cheap at
+// this data scale and stays live without a separate Firestore query.
+export function monthlyPaymentSummary(orders: Order[], today = new Date()): MonthlyPaymentSummary {
+  const start = iso(startOfMonth(today));
+  const end = iso(endOfMonth(today));
+  let received = 0;
+  let pending = 0;
+  let orderCount = 0;
+  for (const o of orders) {
+    if (o.status === "cancelled") continue;
+    if (o.deliveryDate < start || o.deliveryDate > end) continue;
+    orderCount++;
+    const amount = o.amount ?? 0;
+    if (o.paid) received += amount;
+    else pending += amount;
+  }
+  return { total: received + pending, received, pending, orderCount };
+}
+
 export async function runQuery(queryType: QueryType): Promise<QueryResult> {
   const { start, end, label } = rangeForQueryType(queryType);
   const isPendingQuery = queryType.startsWith("pending_");

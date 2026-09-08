@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { subscribeOrders } from "../lib/queries";
 import type { Order, OrderStatus } from "../types";
 
 type Filter = "all" | OrderStatus;
+const VALID_FILTERS: Filter[] = ["pending", "delivered", "cancelled", "all"];
 
 function formatDate(iso: string): string {
   const d = new Date(iso + "T00:00:00");
@@ -12,7 +13,11 @@ function formatDate(iso: string): string {
 
 export function Orders() {
   const [orders, setOrders] = useState<Order[]>([]);
-  const [filter, setFilter] = useState<Filter>("pending");
+  const [searchParams] = useSearchParams();
+  const statusParam = searchParams.get("status");
+  const [filter, setFilter] = useState<Filter>(
+    VALID_FILTERS.includes(statusParam as Filter) ? (statusParam as Filter) : "pending"
+  );
 
   useEffect(() => subscribeOrders(setOrders), []);
 

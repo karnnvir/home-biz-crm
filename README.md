@@ -49,6 +49,14 @@ This deploys Firestore rules, the Cloud Function, and the web app to Firebase Ho
 ### 6. Install it on your phone
 Open the hosted URL on your phone in Chrome (Android) or Safari (iPhone), then use "Add to Home Screen" — it behaves like an installed app from there, including working while the phone is locked out of the browser chrome.
 
+### 7. (Optional) Enable morning push notifications
+1. Firebase console → **Project settings → Cloud Messaging** tab → **Web configuration → Web Push certificates** → Generate key pair.
+2. Add that key to `.env` as `VITE_FIREBASE_VAPID_KEY`.
+3. Edit `public/firebase-messaging-sw.js` — it can't read `.env`, so the Firebase config values near the top must be filled in by hand (same values as your `.env`).
+4. Redeploy (step 5). On her phone, open the installed app and tap "Enable reminders" on the home screen — she must open it from the home-screen icon (not a Safari tab) for iOS to allow push.
+
+She'll get three daily nudges (8:00am / 8:02am / 9:00am, `Asia/Kolkata` by default — change the `TIMEZONE` constant in `functions/src/notifications.ts` if that's wrong): today's pending orders, tomorrow's pending orders, and orders that are delivered but still unpaid. Nothing is sent on days with nothing to report.
+
 ## Local development
 
 ```bash
@@ -75,11 +83,15 @@ src/
   firebase.ts              Firebase init
   lib/voiceParse.ts        calls the parseVoiceCommand Cloud Function
   lib/queries.ts            Firestore reads/writes + date-range query logic
+  lib/push.ts                requests notification permission, registers the FCM token
   hooks/useSpeechRecognition.ts
   hooks/useAuth.ts
   screens/                  Home (mic), Orders, OrderDetail, Customers, Login
   components/                OrderFields (shared form), ConfirmCard, QueryResultCard, BottomNav
+public/
+  firebase-messaging-sw.js  service worker that shows push notifications (edit by hand, see setup step 7)
 functions/
   src/index.ts               parseVoiceCommand: calls Claude API server-side
+  src/notifications.ts        3 scheduled functions: today / tomorrow / payments-pending pushes
 firestore.rules               only signed-in users can read/write
 ```

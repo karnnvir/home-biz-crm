@@ -1,10 +1,12 @@
 import { Link } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 import { parseVoiceCommand } from "../lib/voiceParse";
+import { ensurePushRegistered } from "../lib/push";
 import {
   createOrder,
   findOrCreateCustomer,
+  monthlyPaymentSummary,
   runQuery,
   subscribeCustomers,
   subscribeOrders,
@@ -47,6 +49,12 @@ export function Home() {
 
   useEffect(() => subscribeCustomers(setCustomers), []);
   useEffect(() => subscribeOrders(setOrders), []);
+
+  useEffect(() => {
+    if ("Notification" in window && Notification.permission === "granted") {
+      ensurePushRegistered();
+    }
+  }, []);
 
   const resetFlow = () => {
     setStage("idle");
@@ -164,6 +172,8 @@ export function Home() {
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
     .slice(0, 10);
 
+  const monthSummary = useMemo(() => monthlyPaymentSummary(orders), [orders]);
+
   const micLabel = () => {
     if (stage === "listening") return "Listening… tap when you're done";
     if (stage === "processing") return "Got it — one sec…";
@@ -215,6 +225,29 @@ export function Home() {
       )}
 
       {queryResult && <QueryResultCard result={queryResult} onClose={resetFlow} />}
+
+      {!draft && !queryResult && (
+        <div className="card">
+          <div style={{ fontWeight: 700, marginBottom: 10 }}>This month</div>
+          <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ color: "#8a7d72", fontSize: 13 }}>Total</div>
+              <div style={{ fontWeight: 700, fontSize: 18 }}>₹{monthSummary.total}</div>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ color: "#8a7d72", fontSize: 13 }}>Received</div>
+              <div style={{ fontWeight: 700, fontSize: 18 }}>₹{monthSummary.received}</div>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ color: "#8a7d72", fontSize: 13 }}>Pending</div>
+              <div style={{ fontWeight: 700, fontSize: 18 }}>₹{monthSummary.pending}</div>
+            </div>
+          </div>
+          <div style={{ color: "#8a7d72", fontSize: 13 }}>
+            {monthSummary.orderCount} order{monthSummary.orderCount === 1 ? "" : "s"} this month
+          </div>
+        </div>
+      )}
 
       {!draft && !queryResult && (
         <div className="card">
