@@ -9,6 +9,9 @@ A "just talk to it" mobile web app for home-run businesses — bakers, tailors, 
 - **Storage**: Firebase Firestore (customers + orders).
 - **Nothing saves without confirmation** — every parsed order is shown back before it's written.
 
+## Demo Link
+https://homebiz-bakerdesk.lovable.app
+
 ## One-time setup (things only you can do — they need your own accounts)
 
 ### 1. Create a Firebase project
