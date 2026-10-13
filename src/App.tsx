@@ -6,6 +6,8 @@ import { Home } from "./screens/Home";
 import { Orders } from "./screens/Orders";
 import { OrderDetail } from "./screens/OrderDetail";
 import { Customers } from "./screens/Customers";
+import { Recipes } from "./screens/Recipes";
+import { RecipeDetail } from "./screens/RecipeDetail";
 
 export default function App() {
   const { user, loading } = useAuth();
@@ -25,6 +27,8 @@ export default function App() {
         <Route path="/orders" element={<Orders />} />
         <Route path="/orders/:id" element={<OrderDetail />} />
         <Route path="/customers" element={<Customers />} />
+        <Route path="/recipes" element={<Recipes />} />
+        <Route path="/recipes/:id" element={<RecipeDetail />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <BottomNav />

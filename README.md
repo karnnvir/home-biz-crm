@@ -2,6 +2,16 @@
 
 A "just talk to it" mobile web app for home-run businesses — bakers, tailors, tutors, anyone who takes orders or bookings by word of mouth. Speak an order, confirm it, it's saved. Ask "what's pending this week" or "how much did I make this month" and get an answer.
 
+## Try it
+
+A design prototype is live at **[homebiz-bakerdesk.lovable.app](https://homebiz-bakerdesk.lovable.app)** — no login needed, sample data included. It's a separate, standalone preview (not connected to any real user's data), built to show the UI and flow.
+
+A good first thing to try — tap the mic (or type) and say something like:
+
+> "An order from Priya for chocolate cake qty 2 and brownies qty 1 for price 1200 with delivery tomorrow"
+
+You'll get a confirm screen with the parsed customer, items, quantities, price, and delivery date before anything saves — edit anything that's off, then confirm.
+
 ## How it works
 
 - **Voice → text**: the browser's built-in speech recognition (free, on-device).
@@ -16,6 +26,7 @@ A "just talk to it" mobile web app for home-run businesses — bakers, tailors, 
 2. In the project, enable:
    - **Firestore Database** (production mode is fine — the rules in `firestore.rules` already lock it to signed-in users).
    - **Authentication → Sign-in method → Email/Password**.
+   - **Storage** (Build → Storage → Get started, default bucket, production mode — used for recipe photos; rules in `storage.rules` lock it to signed-in users the same way).
 3. In **Authentication → Users**, manually add one user: the app's primary user's email + a password. That's the only login the app needs.
 4. In **Project settings → General**, scroll to "Your apps", add a **Web app**, and copy the config values.
 
@@ -73,10 +84,12 @@ This runs the frontend against your **live** Firebase project (Firestore + the d
 - Tap the mic on the home screen and describe an order naturally: *"Priya wants a chocolate cake for this Saturday"*.
 - Later, add the price the same way: *"Priya's cake is 1200 rupees"* — it updates the existing order instead of creating a new one.
 - Update status the same way: *"Priya's order is delivered"*.
-- Ask questions: *"What's pending this week?"*, *"How much did I make this month?"*
-- The Home screen always shows a "This month" summary (total / received / pending / order count) — no need to ask.
+- Ask questions: *"What's pending this week?"*, *"Orders above 2000 rupees"*, *"Customers with more than 3 orders"*, *"Items by revenue"* (or *"...for August"* / *"...for 2025"*) — this last one is an **estimate**: since an order only stores one total price, an item's share in a multi-item order is split proportional to quantity, not its actual price. It also asks Claude to group item names that are clearly the same product spoken differently (mishearings, typos, singular/plural — e.g. "Ragi brownies" / "rai brownies" / "ragi dates brownies") into one row, rather than splitting revenue across every spelling variant.
+- The Home screen always shows a summary card (total / received / pending / order count) for the current month — no need to ask. Tap the card's title (a dropdown) to switch to any previous month or full year that has orders, or just ask — *"revenue for August"*, *"how much did I make last month"*, *"total for this year"*, *"show me 2024"* — and the same card updates in place instead of popping up a separate result. Pick "This month" in the dropdown to jump back.
 - The **Orders** and **Customers** tabs are always there as a manual fallback if voice gets something wrong — everything can be hand-edited or deleted there.
 - **Bulk updates**: in Orders, tap **Select** to check off several orders at once (or "Select all" for everything in the current tab), then **Mark delivered** or **Mark paid** to update them all together — handy at the end of the day.
+- **Recipes**: in the Recipes tab, tap "Add recipe" to photograph a page from a handwritten notebook — Claude reads the ingredient list (name, quantity, unit) into an editable table, shown next to the photo so you can double-check it before saving. Recipes stay in the list for reference anytime, and can be edited or deleted later.
+- **Scaling a recipe**: open any recipe (needs a Total weight set) — three tabs, **Original / 1.5× / 2×**, let you flip between weight versions of the same recipe. Every quantity — grams, tbsp, tsp, even counts like "1 banana" — scales by the same ratio and rounds to a practical value (nice fractions for spoons/counts, clean decimals for weights). Only Original is editable/auto-saves; the scaled views are read-only and recompute instantly from it.
 
 ## Project structure
 
@@ -86,14 +99,20 @@ src/
   lib/voiceParse.ts        calls the parseVoiceCommand Cloud Function
   lib/queries.ts            Firestore reads/writes + date-range query logic
   lib/push.ts                requests notification permission, registers the FCM token
+  lib/recipes.ts              Firestore + Storage CRUD for recipes
+  lib/parseRecipeImage.ts     calls the parseRecipeImage Cloud Function
+  lib/imageCompress.ts        resizes/re-encodes a photo before upload
+  lib/recipeScale.ts           pure-math recipe scaling (no API call needed)
   hooks/useSpeechRecognition.ts
   hooks/useAuth.ts
-  screens/                  Home (mic), Orders, OrderDetail, Customers, Login
-  components/                OrderFields (shared form), ConfirmCard, QueryResultCard, BottomNav
+  screens/                  Home (mic), Orders, OrderDetail, Customers, Login, Recipes, RecipeDetail
+  components/                OrderFields (shared form), ConfirmCard, QueryResultCard, BottomNav, RecipeIngredientFields
 public/
   firebase-messaging-sw.js  service worker that shows push notifications (edit by hand, see setup step 7)
 functions/
   src/index.ts               parseVoiceCommand: calls Claude API server-side
   src/notifications.ts        3 scheduled functions: today / tomorrow / payments-pending pushes
+  src/recipes.ts               parseRecipeImage: Claude vision, extracts ingredients from a photo
 firestore.rules               only signed-in users can read/write
+storage.rules                  only signed-in users can read/write (recipe photos)
 ```

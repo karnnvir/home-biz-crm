@@ -12,6 +12,9 @@
   --color-warning-bg: #fbf1de;
   --color-danger: #c94f4f;
   --color-danger-bg: #fbeaea;
+  --color-accent: #1e3a8a;
+  --color-accent-dark: #142a63;
+  --color-accent-bg: #e6ecfb;
   --radius: 16px;
   --shadow: 0 2px 10px rgba(60, 40, 20, 0.08);
   font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
@@ -139,6 +142,13 @@ a {
   min-width: 0;
 }
 
+.item-row .item-unit {
+  width: 72px;
+  flex: 0 0 72px;
+  padding: 12px 8px;
+  text-align: center;
+}
+
 .icon-button {
   flex: 0 0 44px;
   width: 44px;
@@ -197,59 +207,142 @@ a {
   margin-bottom: 2px;
 }
 
-.mic-wrap {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 28px 0 12px;
+.speak-banner {
+  background: linear-gradient(135deg, #1e3a70 0%, #0d1b3f 100%);
+  border-radius: 20px;
+  padding: 20px;
+  color: #ffffff;
+  margin-bottom: 14px;
 }
 
-.mic-button {
-  width: 120px;
-  height: 120px;
+.speak-banner .eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 10px;
+}
+
+.speak-banner .eyebrow-icon {
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
-  border: none;
-  background: var(--color-primary);
-  color: white;
-  font-size: 46px;
+  background: rgba(255, 255, 255, 0.15);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 6px 18px rgba(200, 112, 58, 0.35);
-  transition: transform 0.15s ease;
-}
-
-.mic-button:active {
-  transform: scale(0.96);
-}
-
-.mic-button.listening {
-  background: var(--color-danger);
-  animation: pulse 1.4s infinite;
-}
-
-.mic-button.processing {
-  background: var(--color-warning);
-}
-
-@keyframes pulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(201, 79, 79, 0.45);
-  }
-  70% {
-    box-shadow: 0 0 0 22px rgba(201, 79, 79, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(201, 79, 79, 0);
-  }
-}
-
-.mic-caption {
-  margin-top: 14px;
   font-size: 15px;
+  flex: 0 0 32px;
+}
+
+.speak-banner .headline {
+  font-size: 19px;
+  font-weight: 700;
+  margin-bottom: 16px;
+}
+
+.speak-banner .actions {
+  display: flex;
+  gap: 10px;
+}
+
+.speak-banner .speak-btn {
+  flex: 1;
+  background: #ffffff;
+  color: #1e3a70;
+  border: none;
+  border-radius: 999px;
+  padding: 14px;
+  font-weight: 700;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.speak-banner .speak-btn:disabled {
+  opacity: 0.7;
+}
+
+.speak-banner .speak-btn.listening {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.speak-banner .type-btn {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.speak-banner .type-btn.active {
+  background: #ffffff;
+  color: #1e3a70;
+}
+
+.row-chevron {
   color: var(--color-text-muted);
-  text-align: center;
-  min-height: 20px;
+  font-size: 20px;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-accent);
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.search-wrap {
+  position: relative;
+  margin-bottom: 14px;
+}
+
+.search-wrap .search-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-text-muted);
+  font-size: 14px;
+}
+
+.search-wrap input {
+  width: 100%;
+  padding: 12px 14px 12px 38px;
+  border-radius: 12px;
+  border: 1.5px solid var(--color-border);
+  background: var(--color-surface);
+  font-size: 15px;
+}
+
+.recipe-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--color-accent-bg);
+  color: var(--color-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex: 0 0 40px;
 }
 
 .transcript-box {
@@ -300,11 +393,6 @@ a {
 .badge.delivered {
   background: var(--color-success-bg);
   color: var(--color-success);
-}
-
-.badge.cancelled {
-  background: var(--color-danger-bg);
-  color: var(--color-danger);
 }
 
 .badge.paid {
@@ -376,15 +464,51 @@ a {
 }
 
 .tabs button.active {
-  background: var(--color-text);
+  background: var(--color-accent);
   color: white;
-  border-color: var(--color-text);
+  border-color: var(--color-accent);
 }
 
 .empty-state {
   text-align: center;
   color: var(--color-text-muted);
   padding: 40px 20px;
+}
+
+.filters-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.filter-box {
+  flex: 1;
+  min-width: 0;
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-border);
+  border-radius: 12px;
+  padding: 8px 10px;
+}
+
+.filter-box label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  margin-bottom: 2px;
+}
+
+.filter-box select,
+.filter-box input[type="month"] {
+  width: 100%;
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text);
 }
 
 .field {

@@ -11,9 +11,14 @@ export function Customers() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   useEffect(() => subscribeCustomers(setCustomers), []);
   useEffect(() => subscribeOrders(setOrders), []);
+
+  const filteredCustomers = customers.filter((c) =>
+    c.name.toLowerCase().includes(search.trim().toLowerCase())
+  );
 
   const ordersByCustomer = useMemo(() => {
     const map = new Map<string, Order[]>();
@@ -31,11 +36,20 @@ export function Customers() {
         <h1>Customers</h1>
       </div>
 
+      <div className="search-wrap">
+        <span className="search-icon">🔍</span>
+        <input
+          placeholder="Search customers"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </div>
+
       <div className="card">
-        {customers.length === 0 ? (
-          <div className="empty-state">No customers yet.</div>
+        {filteredCustomers.length === 0 ? (
+          <div className="empty-state">{customers.length === 0 ? "No customers yet." : "No matches."}</div>
         ) : (
-          customers.map((customer) => {
+          filteredCustomers.map((customer) => {
             const custOrders = ordersByCustomer.get(customer.id) ?? [];
             const totalRevenue = custOrders.reduce((sum, o) => sum + (o.amount ?? 0), 0);
             const isOpen = expanded === customer.id;

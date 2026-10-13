@@ -6,7 +6,7 @@ import { ensurePushRegistered } from "../lib/push";
 import {
   createOrder,
   findOrCreateCustomer,
-  monthlyPaymentSummary,
+  periodPaymentSummary,
   runQuery,
   subscribeCustomers,
   subscribeOrders,
@@ -14,9 +14,34 @@ import {
 } from "../lib/queries";
 import { ConfirmCard } from "../components/ConfirmCard";
 import { QueryResultCard } from "../components/QueryResultCard";
-import type { Customer, Order, OrderDraft, ParsedCommand, QueryResult } from "../types";
+import { OrderRowBody } from "../components/OrderRow";
+import type { Customer, Order, OrderDraft, ParsedCommand, Period, QueryResult } from "../types";
 
 type Stage = "idle" | "listening" | "processing" | "confirming" | "saving";
+
+const MONTH_KEY = /^\d{4}-\d{2}$/;
+
+function monthOptionLabel(key: string): string {
+  return new Date(key + "-01T00:00:00").toLocaleDateString("en-IN", {
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function periodValue(period: Period | null): string {
+  if (!period) return "current";
+  if (period.month) return `m:${period.year}-${String(period.month).padStart(2, "0")}`;
+  return `y:${period.year}`;
+}
+
+function periodFromValue(value: string): Period | null {
+  if (value.startsWith("m:")) {
+    const [year, month] = value.slice(2).split("-");
+    return { year: Number(year), month: Number(month) };
+  }
+  if (value.startsWith("y:")) return { year: Number(value.slice(2)), month: null };
+  return null;
+}
 
 function draftFromParsed(parsed: ParsedCommand, matchedName: string | null): OrderDraft {
   return {
@@ -29,23 +54,20 @@ function draftFromParsed(parsed: ParsedCommand, matchedName: string | null): Ord
   };
 }
 
-function formatDate(iso: string): string {
-  const d = new Date(iso + "T00:00:00");
-  return d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
-}
-
 export function Home() {
   const { supported, listening, transcript, error, start, reset } = useSpeechRecognition();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [stage, setStage] = useState<Stage>("idle");
   const [typedText, setTypedText] = useState("");
+  const [showTypeBox, setShowTypeBox] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
   const [clarification, setClarification] = useState<string | null>(null);
   const [draft, setDraft] = useState<OrderDraft | null>(null);
   const [matchedOrderId, setMatchedOrderId] = useState<string | null>(null);
   const [matchedCustomerId, setMatchedCustomerId] = useState<string | null>(null);
   const [queryResult, setQueryResult] = useState<QueryResult | null>(null);
+  const [period, setPeriod] = useState<Period | null>(null);
 
   useEffect(() => subscribeCustomers(setCustomers), []);
   useEffect(() => subscribeOrders(setOrders), []);
@@ -83,8 +105,23 @@ export function Home() {
         return;
       }
 
+      if (parsed.intent === "query" && parsed.queryType === "summary_for_period") {
+        if (parsed.periodYear != null) {
+          const now = new Date();
+          const isCurrentMonth =
+            parsed.periodMonth === now.getMonth() + 1 && parsed.periodYear === now.getFullYear();
+          setPeriod(isCurrentMonth ? null : { year: parsed.periodYear, month: parsed.periodMonth });
+        } else {
+          setClarification("Which month or year did you mean?");
+        }
+        setStage("idle");
+        return;
+      }
+
       if (parsed.intent === "query" && parsed.queryType) {
-        const result = await runQuery(parsed.queryType);
+        const queriedPeriod =
+          parsed.periodYear != null ? { year: parsed.periodYear, month: parsed.periodMonth } : undefined;
+        const result = await runQuery(parsed.queryType, parsed.queryValue, queriedPeriod);
         setQueryResult(result);
         setStage("idle");
         return;
@@ -172,38 +209,77 @@ export function Home() {
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
     .slice(0, 10);
 
-  const monthSummary = useMemo(() => monthlyPaymentSummary(orders), [orders]);
+  const monthSummary = useMemo(
+    () => periodPaymentSummary(orders, period ?? undefined),
+    [orders, period]
+  );
+
+  // Every month/year that actually has orders, plus the active period (which
+  // voice can set to a month with no orders) so the dropdown never goes blank.
+  const periodOptions = useMemo(() => {
+    const now = new Date();
+    const currentKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const months = new Set<string>();
+    const years = new Set<number>();
+    for (const o of orders) {
+      const key = o.deliveryDate?.slice(0, 7);
+      if (key && MONTH_KEY.test(key)) {
+        months.add(key);
+        years.add(Number(key.slice(0, 4)));
+      }
+    }
+    if (period?.month) months.add(`${period.year}-${String(period.month).padStart(2, "0")}`);
+    if (period && !period.month) years.add(period.year);
+    months.delete(currentKey);
+    return {
+      months: [...months].sort().reverse(),
+      years: [...years].sort().reverse(),
+    };
+  }, [orders, period]);
 
   const micLabel = () => {
     if (stage === "listening") return "Listening… tap when you're done";
     if (stage === "processing") return "Got it — one sec…";
     if (!supported) return "Voice isn't supported here — type below instead";
-    return "Tap and tell me about an order";
+    return "Just say it out loud";
   };
 
   return (
     <div className="screen">
-      <div className="mic-wrap">
-        <button
-          className={`mic-button ${stage === "listening" ? "listening" : ""} ${
-            stage === "processing" ? "processing" : ""
-          }`}
-          onClick={handleMicPress}
-          disabled={stage === "processing" || stage === "saving"}
-          aria-label="Speak an order"
-        >
-          🎙️
-        </button>
-        <div className="mic-caption">{micLabel()}</div>
+      <div className="speak-banner">
+        <div className="eyebrow">
+          <span className="eyebrow-icon">🎙️</span>
+          New order
+        </div>
+        <div className="headline">{micLabel()}</div>
+        <div className="actions">
+          <button
+            className={`speak-btn ${stage === "listening" ? "listening" : ""}`}
+            onClick={handleMicPress}
+            disabled={stage === "processing" || stage === "saving"}
+          >
+            {stage === "listening" ? "⏺ Listening…" : "🎙 Speak order"}
+          </button>
+          <button
+            className={`type-btn ${showTypeBox ? "active" : ""}`}
+            onClick={() => setShowTypeBox((v) => !v)}
+            aria-label="Type instead"
+          >
+            ⌨️
+          </button>
+        </div>
+      </div>
 
-        {listening && transcript && <div className="transcript-box">{transcript}</div>}
+      {listening && transcript && <div className="transcript-box">{transcript}</div>}
 
-        {error && <div className="error-text">{error}</div>}
-        {parseError && <div className="error-text">{parseError}</div>}
-        {clarification && <div className="error-text">{clarification}</div>}
+      {error && <div className="error-text">{error}</div>}
+      {parseError && <div className="error-text">{parseError}</div>}
+      {clarification && <div className="error-text">{clarification}</div>}
 
+      {showTypeBox && (
         <div className="type-instead">
           <input
+            autoFocus
             placeholder="…or type it here"
             value={typedText}
             onChange={(e) => setTypedText(e.target.value)}
@@ -211,7 +287,7 @@ export function Home() {
           />
           <button onClick={handleTypedSubmit}>Go</button>
         </div>
-      </div>
+      )}
 
       {draft && (stage === "confirming" || stage === "saving") && (
         <ConfirmCard
@@ -228,7 +304,42 @@ export function Home() {
 
       {!draft && !queryResult && (
         <div className="card">
-          <div style={{ fontWeight: 700, marginBottom: 10 }}>This month</div>
+          <div style={{ marginBottom: 10 }}>
+            <select
+              value={periodValue(period)}
+              onChange={(e) => setPeriod(periodFromValue(e.target.value))}
+              aria-label="Report period"
+              style={{
+                background: "none",
+                border: "none",
+                padding: 0,
+                fontSize: 16,
+                fontWeight: 700,
+                color: "var(--color-text)",
+                maxWidth: "100%",
+              }}
+            >
+              <option value="current">This month</option>
+              {periodOptions.months.length > 0 && (
+                <optgroup label="Previous months">
+                  {periodOptions.months.map((key) => (
+                    <option key={key} value={`m:${key}`}>
+                      {monthOptionLabel(key)}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {periodOptions.years.length > 0 && (
+                <optgroup label="Full year">
+                  {periodOptions.years.map((year) => (
+                    <option key={year} value={`y:${year}`}>
+                      {year} (full year)
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+          </div>
           <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
             <div style={{ flex: 1 }}>
               <div style={{ color: "#8a7d72", fontSize: 13 }}>Total</div>
@@ -244,7 +355,7 @@ export function Home() {
             </div>
           </div>
           <div style={{ color: "#8a7d72", fontSize: 13 }}>
-            {monthSummary.orderCount} order{monthSummary.orderCount === 1 ? "" : "s"} this month
+            {monthSummary.orderCount} order{monthSummary.orderCount === 1 ? "" : "s"}
           </div>
         </div>
       )}
@@ -257,17 +368,7 @@ export function Home() {
           ) : (
             recentlyAdded.map((order) => (
               <Link className="order-row" to={`/orders/${order.id}`} key={order.id}>
-                <div>
-                  <div className="items">
-                    {order.customerName} —{" "}
-                    {order.items.map((it) => `${it.quantity}x ${it.name}`).join(", ")}
-                  </div>
-                  <div className="meta">
-                    {formatDate(order.deliveryDate)} ·{" "}
-                    <span className={`badge ${order.status}`}>{order.status}</span>
-                  </div>
-                </div>
-                <div className="amount">{order.amount != null ? `₹${order.amount}` : "—"}</div>
+                <OrderRowBody order={order} showChevron />
               </Link>
             ))
           )}

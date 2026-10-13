@@ -11,7 +11,10 @@ function formatDate(iso: string): string {
 }
 
 export function QueryResultCard({ result, onClose }: Props) {
-  const isRevenue = result.queryType.startsWith("revenue_");
+  const isItemsList = result.queryType === "items_by_revenue";
+  const isRevenue =
+    result.queryType === "orders_above_amount" || result.queryType === "orders_below_amount" || isItemsList;
+  const isCustomerList = result.queryType === "frequent_customers";
 
   return (
     <div className="card">
@@ -20,17 +23,44 @@ export function QueryResultCard({ result, onClose }: Props) {
       {isRevenue && (
         <div className="stat-grid" style={{ marginBottom: 14 }}>
           <div className="stat-tile">
-            <div className="value">₹{(result.revenueTotal ?? 0).toLocaleString("en-IN")}</div>
+            <div className="value">₹{Math.round(result.revenueTotal ?? 0).toLocaleString("en-IN")}</div>
             <div className="label">Revenue</div>
           </div>
           <div className="stat-tile">
-            <div className="value">{result.orders.length}</div>
-            <div className="label">Orders</div>
+            <div className="value">{isItemsList ? (result.items?.length ?? 0) : result.orders.length}</div>
+            <div className="label">{isItemsList ? "Items" : "Orders"}</div>
           </div>
         </div>
       )}
 
-      {result.orders.length === 0 ? (
+      {isItemsList ? (
+        (result.items?.length ?? 0) === 0 ? (
+          <div className="empty-state">Nothing here.</div>
+        ) : (
+          result.items!.map((item) => (
+            <div className="order-row" key={item.name}>
+              <div>
+                <div className="items">{item.name}</div>
+                <div className="meta">{item.quantity} sold</div>
+              </div>
+              <div className="amount">₹{Math.round(item.revenue).toLocaleString("en-IN")}</div>
+            </div>
+          ))
+        )
+      ) : isCustomerList ? (
+        (result.customers?.length ?? 0) === 0 ? (
+          <div className="empty-state">Nothing here.</div>
+        ) : (
+          result.customers!.map((c) => (
+            <div className="order-row" key={c.name}>
+              <div className="items">{c.name}</div>
+              <div className="amount">
+                {c.orderCount} order{c.orderCount === 1 ? "" : "s"}
+              </div>
+            </div>
+          ))
+        )
+      ) : result.orders.length === 0 ? (
         <div className="empty-state">Nothing here.</div>
       ) : (
         result.orders.map((order) => (

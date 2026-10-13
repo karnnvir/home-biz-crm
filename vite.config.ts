@@ -9,6 +9,14 @@ export default defineConfig({
     VitePWA({
       registerType: "autoUpdate",
       includeAssets: ["favicon.svg"],
+      workbox: {
+        // Make a newly-deployed service worker take over immediately instead
+        // of waiting for every open tab/app instance to fully close first —
+        // without this, a cold-launched PWA can briefly render against a
+        // stale cached bundle from before the last deploy.
+        skipWaiting: true,
+        clientsClaim: true,
+      },
       manifest: {
         name: "Home Biz CRM",
         short_name: "Home Biz",

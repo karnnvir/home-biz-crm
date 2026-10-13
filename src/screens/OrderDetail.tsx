@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { deleteOrder, findOrCreateCustomer, subscribeCustomers, subscribeOrders, updateOrder } from "../lib/queries";
 import { OrderFields } from "../components/OrderFields";
 import type { Customer, Order, OrderDraft } from "../types";
@@ -25,11 +25,13 @@ export function OrderDetail() {
   const [loaded, setLoaded] = useState(false);
   const [draft, setDraft] = useState<OrderDraft | null>(null);
   const [saving, setSaving] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
 
   const originalOrder = useRef<Order | null>(null);
   const initialized = useRef(false);
   const skipNextSave = useRef(true);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const savedBannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(
     () =>
@@ -40,6 +42,11 @@ export function OrderDetail() {
     []
   );
   useEffect(() => subscribeCustomers(setCustomers), []);
+  useEffect(() => {
+    return () => {
+      if (savedBannerTimer.current) clearTimeout(savedBannerTimer.current);
+    };
+  }, []);
 
   const order = orders.find((o) => o.id === id);
 
@@ -76,6 +83,9 @@ export function OrderDetail() {
           paid: draft.paid,
           status: draft.status,
         });
+        setJustSaved(true);
+        if (savedBannerTimer.current) clearTimeout(savedBannerTimer.current);
+        savedBannerTimer.current = setTimeout(() => setJustSaved(false), 2000);
       } finally {
         setSaving(false);
       }
@@ -108,17 +118,27 @@ export function OrderDetail() {
   return (
     <div className="screen">
       <div className="app-header" style={{ padding: "8px 0 4px" }}>
+        <Link to="/orders" className="back-link">
+          ‹ Orders
+        </Link>
         <h1>Edit order</h1>
-        <p>{saving ? "Saving…" : "Changes save automatically"}</p>
+        <p style={justSaved ? { color: "var(--color-success)", fontWeight: 600 } : undefined}>
+          {saving ? "Saving…" : justSaved ? "✓ Saved" : "Changes save automatically"}
+        </p>
       </div>
 
       <div className="card">
         <OrderFields draft={draft} onChange={setDraft} />
       </div>
 
-      <button className="big-button danger" onClick={handleDelete}>
-        Delete order
-      </button>
+      <div style={{ textAlign: "center", marginTop: 20 }}>
+        <button
+          onClick={handleDelete}
+          style={{ background: "none", border: "none", color: "var(--color-danger)", fontSize: 14, padding: 10 }}
+        >
+          Delete order
+        </button>
+      </div>
     </div>
   );
 }

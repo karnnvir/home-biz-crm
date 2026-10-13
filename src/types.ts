@@ -12,7 +12,7 @@ export interface OrderItem {
   unit?: string | null;
 }
 
-export type OrderStatus = "pending" | "delivered" | "cancelled";
+export type OrderStatus = "pending" | "delivered";
 
 export interface Order {
   id: string;
@@ -33,11 +33,11 @@ export type QueryType =
   | "pending_tomorrow"
   | "pending_this_week"
   | "pending_next_week"
-  | "revenue_this_month"
-  | "revenue_last_month"
-  | "revenue_this_year"
-  | "orders_this_month"
-  | "orders_this_year"
+  | "summary_for_period"
+  | "items_by_revenue"
+  | "orders_above_amount"
+  | "orders_below_amount"
+  | "frequent_customers"
   | "unknown";
 
 export type ParsedIntent = "new_order" | "update_order" | "query" | "unknown";
@@ -59,7 +59,15 @@ export interface ParsedCommand {
   status: OrderStatus | null;
   matchedOrderId: string | null;
   queryType: QueryType | null;
+  queryValue: number | null;
+  periodYear: number | null;
+  periodMonth: number | null; // 1-12, or null for a whole-year period
   clarification: string | null;
+}
+
+export interface Period {
+  year: number;
+  month: number | null; // 1-12, or null for a whole-year period
 }
 
 export interface QueryResult {
@@ -67,6 +75,8 @@ export interface QueryResult {
   label: string;
   orders: Order[];
   revenueTotal?: number;
+  customers?: { name: string; orderCount: number }[];
+  items?: { name: string; quantity: number; revenue: number }[];
 }
 
 // Shared editable shape used by both the voice-confirm screen and the
@@ -78,4 +88,22 @@ export interface OrderDraft {
   amount: number | null;
   paid: boolean;
   status: OrderStatus;
+}
+
+export interface RecipeIngredient {
+  name: string;
+  quantity: string | null; // as written, e.g. "35", "1/4" — null means "to taste" / no amount written
+  unit: string | null;
+}
+
+export interface Recipe {
+  id: string;
+  name: string;
+  ingredients: RecipeIngredient[];
+  totalWeight: string | null; // e.g. "500 g" — kept separate from notes, it's the one figure she actually needs
+  notes: string | null; // anything else, e.g. pan size, yield, oven temp
+  photoPath: string;
+  photoUrl: string;
+  createdAt: string;
+  updatedAt: string;
 }

@@ -1,53 +1,69 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { bulkUpdateOrders, subscribeOrders } from "../lib/queries";
-import type { Order, OrderStatus } from "../types";
+import { OrderRowBody } from "../components/OrderRow";
+import type { Order } from "../types";
 
-type Filter = "all" | OrderStatus;
-const VALID_FILTERS: Filter[] = ["pending", "delivered", "cancelled", "all"];
+type PaymentFilter = "unpaid" | "paid" | "all";
+type StatusFilter = "pending" | "delivered" | "all";
 
-function formatDate(iso: string): string {
-  const d = new Date(iso + "T00:00:00");
-  return d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
+function currentMonth(): string {
+  return new Date().toISOString().slice(0, 7);
 }
 
-function OrderRowBody({ order }: { order: Order }) {
-  return (
-    <>
-      <div style={{ minWidth: 0, flex: 1 }}>
-        <div className="items">
-          {order.customerName} —{" "}
-          {order.items.map((it) => `${it.quantity}x ${it.name}`).join(", ")}
-        </div>
-        <div className="meta">
-          {formatDate(order.deliveryDate)} · <span className={`badge ${order.status}`}>{order.status}</span>{" "}
-          <span className={`badge ${order.paid ? "paid" : "unpaid"}`}>
-            {order.paid ? "paid" : "unpaid"}
-          </span>
-        </div>
-      </div>
-      <div className="amount">{order.amount != null ? `₹${order.amount}` : "—"}</div>
-    </>
-  );
+function monthLabel(month: string): string {
+  return new Date(month + "-01T00:00:00").toLocaleDateString("en-IN", {
+    month: "short",
+    year: "numeric",
+  });
 }
 
 export function Orders() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [searchParams] = useSearchParams();
   const statusParam = searchParams.get("status");
-  const [filter, setFilter] = useState<Filter>(
-    VALID_FILTERS.includes(statusParam as Filter) ? (statusParam as Filter) : "pending"
-  );
+  const linkedStatus: StatusFilter | null =
+    statusParam === "pending" || statusParam === "delivered" ? statusParam : null;
+
+  const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>(linkedStatus ? "all" : "unpaid");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(linkedStatus ?? "all");
+  const [month, setMonth] = useState<string>(linkedStatus ? "" : currentMonth());
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [search, setSearch] = useState("");
 
   useEffect(() => subscribeOrders(setOrders), []);
 
-  const filtered = useMemo(
-    () => (filter === "all" ? orders : orders.filter((o) => o.status === filter)),
-    [orders, filter]
-  );
+  const filtered = useMemo(() => {
+    let list = orders;
+    if (statusFilter !== "all") list = list.filter((o) => o.status === statusFilter);
+    if (paymentFilter !== "all") {
+      list = list.filter((o) => (paymentFilter === "paid" ? o.paid : !o.paid));
+    }
+    if (month) {
+      list = list.filter((o) => !o.deliveryDate || o.deliveryDate.startsWith(month));
+    }
+    const q = search.trim().toLowerCase();
+    if (q) {
+      list = list.filter(
+        (o) =>
+          o.customerName.toLowerCase().includes(q) ||
+          o.items.some((it) => it.name.toLowerCase().includes(q))
+      );
+    }
+    return list;
+  }, [orders, statusFilter, paymentFilter, month, search]);
+
+  // filtered still includes date-less orders for every month (so they're never
+  // hidden from the list) — this count is scoped to orders that actually match
+  // the selected month, so the subtitle doesn't overstate what's "in" it. Any
+  // gap between the two is surfaced explicitly rather than left unexplained.
+  const monthMatchCount = useMemo(() => {
+    if (!month) return filtered.length;
+    return filtered.filter((o) => o.deliveryDate && o.deliveryDate.startsWith(month)).length;
+  }, [filtered, month]);
+  const datelessShown = month ? filtered.length - monthMatchCount : 0;
 
   const toggleSelectMode = () => {
     setSelectMode((v) => !v);
@@ -85,7 +101,14 @@ export function Orders() {
         className="app-header"
         style={{ padding: "8px 0 4px", display: "flex", justifyContent: "space-between", alignItems: "center" }}
       >
-        <h1>Orders</h1>
+        <div>
+          <h1>Orders</h1>
+          <p>
+            {monthMatchCount} order{monthMatchCount === 1 ? "" : "s"}
+            {month ? ` in ${monthLabel(month)}` : ""}
+            {datelessShown > 0 ? ` (+${datelessShown} without a date)` : ""}
+          </p>
+        </div>
         <button
           onClick={toggleSelectMode}
           style={{ background: "none", border: "none", color: "var(--color-primary)", fontWeight: 600, fontSize: 15 }}
@@ -94,12 +117,54 @@ export function Orders() {
         </button>
       </div>
 
-      <div className="tabs">
-        {(["pending", "delivered", "cancelled", "all"] as Filter[]).map((f) => (
-          <button key={f} className={filter === f ? "active" : ""} onClick={() => setFilter(f)}>
-            {f[0].toUpperCase() + f.slice(1)}
-          </button>
-        ))}
+      <div className="filters-row">
+        <div className="filter-box">
+          <label>Payment</label>
+          <select value={paymentFilter} onChange={(e) => setPaymentFilter(e.target.value as PaymentFilter)}>
+            <option value="unpaid">Unpaid</option>
+            <option value="paid">Paid</option>
+            <option value="all">All</option>
+          </select>
+        </div>
+        <div className="filter-box">
+          <label>Status</label>
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}>
+            <option value="pending">Pending</option>
+            <option value="delivered">Delivered</option>
+            <option value="all">All</option>
+          </select>
+        </div>
+        <div className="filter-box" style={{ position: "relative" }}>
+          <label>Month</label>
+          <div
+            style={{
+              fontSize: 15,
+              fontWeight: 700,
+              color: "var(--color-text)",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            {month ? monthLabel(month) : "All"}
+          </div>
+          <input
+            type="month"
+            value={month}
+            onChange={(e) => setMonth(e.target.value)}
+            aria-label="Month"
+            style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer" }}
+          />
+        </div>
+      </div>
+
+      <div className="search-wrap">
+        <span className="search-icon">🔍</span>
+        <input
+          placeholder="Search customer or bake"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
       </div>
 
       {selectMode && (
@@ -145,11 +210,11 @@ export function Orders() {
                   checked={selected.has(order.id)}
                   onChange={() => toggleOrder(order.id)}
                 />
-                <OrderRowBody order={order} />
+                <OrderRowBody order={order} showChevron={false} />
               </label>
             ) : (
               <Link className="order-row" to={`/orders/${order.id}`} key={order.id}>
-                <OrderRowBody order={order} />
+                <OrderRowBody order={order} showChevron />
               </Link>
             )
           )

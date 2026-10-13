@@ -6,6 +6,8 @@ import * as chrono from "chrono-node";
 initializeApp();
 
 export { notifyToday, notifyTomorrow, notifyPaymentsPending } from "./notifications.js";
+export { parseRecipeImage } from "./recipes.js";
+export { groupItemNames } from "./items.js";
 
 const ANTHROPIC_API_KEY = defineSecret("ANTHROPIC_API_KEY");
 const MODEL = "claude-haiku-4-5-20251001";
@@ -16,11 +18,11 @@ type QueryType =
   | "pending_tomorrow"
   | "pending_this_week"
   | "pending_next_week"
-  | "revenue_this_month"
-  | "revenue_last_month"
-  | "revenue_this_year"
-  | "orders_this_month"
-  | "orders_this_year"
+  | "summary_for_period"
+  | "items_by_revenue"
+  | "orders_above_amount"
+  | "orders_below_amount"
+  | "frequent_customers"
   | "unknown";
 
 interface RequestBody {
@@ -38,7 +40,7 @@ interface RequestBody {
   }[];
 }
 
-type Status = "pending" | "delivered" | "cancelled";
+type Status = "pending" | "delivered";
 
 interface ExtractedOrder {
   intent: Intent;
@@ -51,6 +53,9 @@ interface ExtractedOrder {
   status: Status | null;
   matchedOrderId: string | null;
   queryType: QueryType | null;
+  queryValue: number | null;
+  periodPhrase: string | null;
+  periodGranularity: "month" | "year" | null;
   clarification: string | null;
 }
 
@@ -92,9 +97,9 @@ const TOOL_SCHEMA = {
       paid: { type: ["boolean", "null"], description: "Whether she said this was already paid." },
       status: {
         type: ["string", "null"],
-        enum: ["pending", "delivered", "cancelled", null],
+        enum: ["pending", "delivered", null],
         description:
-          "Set only if she explicitly says the order's status changed, e.g. 'that order is delivered', 'mark it cancelled', 'I delivered Priya's cake'. Leave null otherwise — do not infer this from a price or date being mentioned.",
+          "Set only if she explicitly says the order's status changed, e.g. 'that order is delivered', 'I delivered Priya's cake'. Leave null otherwise — do not infer this from a price or date being mentioned. There is no 'cancelled' status — if she wants an order gone, treat it as a request to delete it, not a status change (there's no delete intent to extract; just leave status null and let her use the app's delete option).",
       },
       matchedOrderId: {
         type: ["string", "null"],
@@ -107,22 +112,36 @@ const TOOL_SCHEMA = {
           "pending_tomorrow",
           "pending_this_week",
           "pending_next_week",
-          "revenue_this_month",
-          "revenue_last_month",
-          "revenue_this_year",
-          "orders_this_month",
-          "orders_this_year",
+          "summary_for_period",
+          "items_by_revenue",
+          "orders_above_amount",
+          "orders_below_amount",
+          "frequent_customers",
           "unknown",
           null,
         ],
-        description: "Set only when intent is 'query'.",
+        description:
+          "Set only when intent is 'query'. summary_for_period: she's asking about revenue/earnings/orders for a specific month or year, e.g. 'revenue for August', 'how much did I make last month', 'total for this year', 'show me 2024' — covers questions about the current month/year too. items_by_revenue: she wants a list of items/products sold, ranked by revenue, e.g. 'revenue by item', 'which items sell the most', 'list of items sorted by revenue' — optionally for a specific month/year via periodPhrase, same as summary_for_period; if she doesn't mention a period, leave periodPhrase null and it defaults to the current month. orders_above_amount: she wants orders (and their total revenue) at or above a price threshold, e.g. 'orders above 2000 rupees'. orders_below_amount: same but below/under a threshold, e.g. 'orders below 20000 rupees'. frequent_customers: she wants customers who have placed more than N orders, e.g. 'customers with more than 3 orders'.",
+      },
+      queryValue: {
+        type: ["number", "null"],
+        description: "The numeric threshold for orders_above_amount/orders_below_amount (a rupee amount) or frequent_customers (an order count). Null for every other queryType.",
+      },
+      periodPhrase: {
+        type: ["string", "null"],
+        description: "Only for queryType 'summary_for_period' or 'items_by_revenue': the raw month/year phrase as spoken (e.g. 'August', 'last month', 'this year', '2024', 'August 2025'), if any. Do not resolve it yourself.",
+      },
+      periodGranularity: {
+        type: ["string", "null"],
+        enum: ["month", "year", null],
+        description: "Only alongside periodPhrase: whether she's asking about a single month or a whole year.",
       },
       clarification: {
         type: ["string", "null"],
         description: "A short, friendly message to show her if intent is 'unknown' or the request is too ambiguous to act on.",
       },
     },
-    required: ["intent", "customerName", "matchedCustomerId", "items", "datePhrase", "amount", "paid", "status", "matchedOrderId", "queryType", "clarification"],
+    required: ["intent", "customerName", "matchedCustomerId", "items", "datePhrase", "amount", "paid", "status", "matchedOrderId", "queryType", "queryValue", "periodPhrase", "periodGranularity", "clarification"],
   },
 };
 
@@ -135,7 +154,7 @@ function buildSystemPrompt(body: RequestBody): string {
     `Known customers: ${JSON.stringify(body.customers)}`,
     `Open (pending) orders: ${JSON.stringify(body.openOrders)}`,
     `When she mentions a price, date, or status change for someone who already has a pending order for a similar item, treat it as update_order and pick the best matching id from openOrders. Otherwise treat it as new_order.`,
-    `Status changes ("delivered", "cancelled", "done", "picked up") are always update_order against an existing order — never invent a new order just to record a status change.`,
+    `Status changes ("delivered", "done", "picked up") are always update_order against an existing order — never invent a new order just to record a status change. There is no "cancelled" status.`,
     `Always call the extract_order tool with your best interpretation.`,
   ].join("\n\n");
 }
@@ -148,8 +167,30 @@ function resolveDatePhrase(phrase: string | null, referenceISO: string): string 
   return parsed.toISOString().slice(0, 10);
 }
 
+// Revenue/earnings questions are always about a period that's already happened
+// (or is in progress), so resolve with forwardDate: false — unlike order due
+// dates, which always look forward.
+function resolvePeriod(
+  phrase: string | null,
+  granularity: "month" | "year" | null,
+  referenceISO: string
+): { year: number; month: number | null } | null {
+  if (!phrase || !granularity) return null;
+
+  const bareYear = phrase.trim().match(/^(\d{4})$/);
+  if (bareYear) return { year: Number(bareYear[1]), month: null };
+
+  const referenceDate = new Date(referenceISO + "T12:00:00");
+  const parsed = chrono.parseDate(phrase, referenceDate, { forwardDate: false });
+  if (!parsed) return null;
+
+  return granularity === "year"
+    ? { year: parsed.getFullYear(), month: null }
+    : { year: parsed.getFullYear(), month: parsed.getMonth() + 1 };
+}
+
 export const parseVoiceCommand = onCall(
-  { secrets: [ANTHROPIC_API_KEY], region: "us-central1", cors: true, minInstances: 1 },
+  { secrets: [ANTHROPIC_API_KEY], region: "us-central1", cors: true, minInstances: 0 },
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Sign in first.");
@@ -193,6 +234,7 @@ export const parseVoiceCommand = onCall(
 
     const extracted = toolUse.input as ExtractedOrder;
     const deliveryDate = resolveDatePhrase(extracted.datePhrase, body.today);
+    const period = resolvePeriod(extracted.periodPhrase, extracted.periodGranularity, body.today);
 
     return {
       intent: extracted.intent,
@@ -205,6 +247,9 @@ export const parseVoiceCommand = onCall(
       status: extracted.status,
       matchedOrderId: extracted.matchedOrderId,
       queryType: extracted.queryType,
+      queryValue: extracted.queryValue,
+      periodYear: period?.year ?? null,
+      periodMonth: period?.month ?? null,
       clarification: extracted.clarification,
     };
   }
