@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026-11-05 — Safer new-vs-update handling, customer cleanup, sorting
+
+**Fixed**
+- A new order for a customer who already had a pending order could be read as an *update*
+  and silently overwrite the old order's items, date and price (which lowered monthly
+  totals). Voice parsing now defaults to a new order and only updates when you clearly
+  refer to the existing one ("update", "change", "mark delivered", or a short price/date
+  statement like "Priya's cake is 1200"). When unsure it picks new.
+- The "Update this order?" confirm card now shows a banner with the old vs new items, date
+  and price, so an overwrite can't happen unnoticed.
+- Placeholder names ("unknown", "unnamed", "none", "n/a") are no longer saved as customers.
+- Editing an order's customer name no longer creates a customer for every half-typed name;
+  the customer is linked once you leave the name field.
+
+**What's new**
+- Customers: sort by name, most orders, or highest amount; remove all customers with no
+  orders in one tap; rename a customer (orders update too) or merge it into another.
+- Home period dropdown no longer lists future months/years.
+
+**Deploy note:** includes a Cloud Functions change (`parseVoiceCommand` prompt), so a full
+`npm run deploy` is needed, not just hosting.
+
 ## 2026-10-03 — Voice parsing no longer keeps an instance always running
 
 `parseVoiceCommand` previously ran with `minInstances: 1` (one always-on instance) to

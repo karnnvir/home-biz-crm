@@ -97,7 +97,10 @@ export function Home() {
     try {
       const parsed = await parseVoiceCommand(text, customers, orders);
 
-      if (parsed.intent === "unknown" || (!parsed.customerName && parsed.intent !== "query")) {
+      // The model sometimes fills in "unknown" when no name was said; that would
+      // otherwise get saved as a real customer.
+      const hasNoName = !parsed.customerName || /^(unknown|unnamed|none|n\/a)$/i.test(parsed.customerName.trim());
+      if (parsed.intent === "unknown" || (hasNoName && parsed.intent !== "query")) {
         setClarification(
           parsed.clarification ?? "Didn't quite catch that. Try again, or type it instead."
         );
@@ -223,7 +226,9 @@ export function Home() {
     const years = new Set<number>();
     for (const o of orders) {
       const key = o.deliveryDate?.slice(0, 7);
-      if (key && MONTH_KEY.test(key)) {
+      // Only past/current periods: the dropdown is for looking back, and a
+      // future-dated order (or a mistyped year) shouldn't add a "2027" entry.
+      if (key && MONTH_KEY.test(key) && key <= currentKey) {
         months.add(key);
         years.add(Number(key.slice(0, 4)));
       }
@@ -296,6 +301,7 @@ export function Home() {
           onConfirm={handleConfirm}
           onCancel={resetFlow}
           isUpdate={!!matchedOrderId}
+          existing={orders.find((o) => o.id === matchedOrderId)}
           saving={stage === "saving"}
         />
       )}

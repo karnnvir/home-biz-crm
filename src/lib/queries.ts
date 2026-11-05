@@ -9,6 +9,7 @@ import {
   query,
   updateDoc,
   where,
+  writeBatch,
 } from "firebase/firestore";
 import {
   addDays,
@@ -51,6 +52,38 @@ export async function findOrCreateCustomer(name: string, existing: Customer[]): 
     createdAt: new Date().toISOString(),
   });
   return docRef.id;
+}
+
+export async function deleteCustomers(customerIds: string[]): Promise<void> {
+  const batch = writeBatch(db);
+  for (const id of customerIds) batch.delete(doc(db, "customers", id));
+  await batch.commit();
+}
+
+// Renames a customer. If the new name is already another customer, merges into
+// that one instead: this customer's orders move over and this record is deleted.
+// Orders keep a copy of the name, so those are rewritten too.
+export async function renameOrMergeCustomer(
+  customer: Customer,
+  newName: string,
+  customers: Customer[],
+  customerOrders: Order[]
+): Promise<{ merged: boolean }> {
+  const name = newName.trim();
+  const target = customers.find(
+    (c) => c.id !== customer.id && c.name.trim().toLowerCase() === name.toLowerCase()
+  );
+  const targetId = target?.id ?? customer.id;
+  const targetName = target?.name ?? name;
+  const now = new Date().toISOString();
+  const batch = writeBatch(db);
+  for (const o of customerOrders) {
+    batch.update(doc(db, "orders", o.id), { customerId: targetId, customerName: targetName, updatedAt: now });
+  }
+  if (target) batch.delete(doc(db, "customers", customer.id));
+  else batch.update(doc(db, "customers", customer.id), { name });
+  await batch.commit();
+  return { merged: !!target };
 }
 
 export async function createOrder(

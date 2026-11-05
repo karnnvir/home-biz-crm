@@ -70,7 +70,7 @@ const TOOL_SCHEMA = {
         type: "string",
         enum: ["new_order", "update_order", "query", "unknown"],
         description:
-          "new_order: a brand new order was described. update_order: this refers to an existing order (e.g. adding/changing a price, date, or status). query: she's asking a question about pending orders or revenue. unknown: unclear or unrelated speech.",
+          "new_order: a brand new order was described. update_order: she explicitly refers to an existing order (e.g. 'update', 'change', 'mark as delivered', or a short statement that only adds a price/date/status to it). When unsure, use new_order instead. query: she's asking a question about pending orders or revenue. unknown: unclear or unrelated speech.",
       },
       customerName: { type: ["string", "null"], description: "Customer name as spoken." },
       matchedCustomerId: {
@@ -153,7 +153,8 @@ function buildSystemPrompt(body: RequestBody): string {
     `Today is ${weekday}, ${body.today}. You help a home-business owner log customer orders by voice.`,
     `Known customers: ${JSON.stringify(body.customers)}`,
     `Open (pending) orders: ${JSON.stringify(body.openOrders)}`,
-    `When she mentions a price, date, or status change for someone who already has a pending order for a similar item, treat it as update_order and pick the best matching id from openOrders. Otherwise treat it as new_order.`,
+    `Default to new_order. A customer having an open order already does NOT make a new request an update: repeat customers often order the same thing again. Use new_order whenever she describes an order ("wants", "ordered", "needs", "for Saturday") or gives item quantities, even for a customer or item that already has a pending order.`,
+    `Use update_order only when she clearly refers to the existing order: explicit words like "update", "change", "make it", "instead", "mark", "that order", or a short statement with no new order details that only adds a price, date, or status to an order that already exists (e.g. "Priya's cake is 1200 rupees", "Priya's order is delivered"). If you are unsure whether it is new or an update, choose new_order — a duplicate is easy to spot, but silently overwriting an existing order loses data. When you do pick update_order, choose the best matching id from openOrders.`,
     `Status changes ("delivered", "done", "picked up") are always update_order against an existing order — never invent a new order just to record a status change. There is no "cancelled" status.`,
     `Always call the extract_order tool with your best interpretation.`,
   ].join("\n\n");

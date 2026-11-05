@@ -30,6 +30,9 @@ export function OrderDetail() {
   const originalOrder = useRef<Order | null>(null);
   const initialized = useRef(false);
   const skipNextSave = useRef(true);
+  // The customer record this order is linked to. Updated only when she finishes
+  // editing the name (on blur), so half-typed names never become customers.
+  const customerIdRef = useRef("");
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedBannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -53,6 +56,7 @@ export function OrderDetail() {
   useEffect(() => {
     if (!initialized.current && order) {
       originalOrder.current = order;
+      customerIdRef.current = order.customerId;
       setDraft(toDraft(order));
       initialized.current = true;
     }
@@ -69,13 +73,9 @@ export function OrderDetail() {
       const base = originalOrder.current!;
       setSaving(true);
       try {
-        let customerId = base.customerId;
         const trimmedName = draft.customerName.trim();
-        if (trimmedName && trimmedName !== base.customerName.trim()) {
-          customerId = await findOrCreateCustomer(trimmedName, customers);
-        }
         await updateOrder(base.id, {
-          customerId,
+          customerId: customerIdRef.current,
           customerName: trimmedName || base.customerName,
           items: draft.items.filter((i) => i.name.trim()),
           deliveryDate: draft.deliveryDate,
@@ -97,6 +97,15 @@ export function OrderDetail() {
     // customers is intentionally omitted: we only need it at save time, not as a re-trigger
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft]);
+
+  const handleCustomerBlur = async () => {
+    if (!draft || !order) return;
+    const name = draft.customerName.trim();
+    const linked = customers.find((c) => c.id === customerIdRef.current);
+    if (!name || (linked && linked.name.trim().toLowerCase() === name.toLowerCase())) return;
+    customerIdRef.current = await findOrCreateCustomer(name, customers);
+    await updateOrder(order.id, { customerId: customerIdRef.current, customerName: name });
+  };
 
   const handleDelete = async () => {
     if (!order) return;
@@ -128,7 +137,7 @@ export function OrderDetail() {
       </div>
 
       <div className="card">
-        <OrderFields draft={draft} onChange={setDraft} />
+        <OrderFields draft={draft} onChange={setDraft} onCustomerBlur={handleCustomerBlur} />
       </div>
 
       <div style={{ textAlign: "center", marginTop: 20 }}>

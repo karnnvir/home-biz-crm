@@ -3,6 +3,7 @@ import type { OrderDraft, OrderStatus, ParsedItem } from "../types";
 interface Props {
   draft: OrderDraft;
   onChange: (draft: OrderDraft) => void;
+  onCustomerBlur?: () => void;
 }
 
 function formatDateLabel(iso: string): string {
@@ -11,7 +12,7 @@ function formatDateLabel(iso: string): string {
   return d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
 }
 
-export function OrderFields({ draft, onChange }: Props) {
+export function OrderFields({ draft, onChange, onCustomerBlur }: Props) {
   const update = (patch: Partial<OrderDraft>) => onChange({ ...draft, ...patch });
 
   const updateItem = (index: number, patch: Partial<ParsedItem>) => {
@@ -34,6 +35,7 @@ export function OrderFields({ draft, onChange }: Props) {
         <input
           value={draft.customerName}
           onChange={(e) => update({ customerName: e.target.value })}
+          onBlur={onCustomerBlur}
           placeholder="Customer name"
         />
       </div>
