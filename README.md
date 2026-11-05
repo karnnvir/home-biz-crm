@@ -19,6 +19,9 @@ You'll get a confirm screen with the parsed customer, items, quantities, price, 
 - **Storage**: Firebase Firestore (customers + orders).
 - **Nothing saves without confirmation** — every parsed order is shown back before it's written.
 
+## Demo Link
+https://homebiz-bakerdesk.lovable.app
+
 ## One-time setup (things only you can do — they need your own accounts)
 
 ### 1. Create a Firebase project
